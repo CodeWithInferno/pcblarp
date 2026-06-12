@@ -8,14 +8,24 @@ const CLERK_ENABLED = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY)
 const GREETING = {
   role: 'assistant',
   content:
-    "Hey! I'm your PCB agent. Describe the robot you want to build — motors, sensors, power, form factor — and I'll spec the board.",
+    "Hey! Describe the device you want to build — motors, sensors, power, form factor — and I'll run it through the PCB pipeline.",
 }
 
 const SUGGESTIONS = [
   'A line-following car with 2 DC motors and an ESP32',
-  'Quadruped with 12 servos and a Pi 5',
-  'Drone flight controller with a BMI270 IMU',
+  'A wearable that records audio and sends it over BLE',
+  'A desk sensor: temp, humidity, OLED, USB-C',
 ]
+
+const STAGE_LABEL = {
+  spec: 'Spec',
+  parts: 'Parts',
+  schematic: 'Schematic',
+  layout: 'Layout',
+  export: 'Export',
+}
+
+const TERMINAL = new Set(['done', 'partial', 'failed'])
 
 function ChipIcon({ className = '' }) {
   return (
@@ -29,85 +39,104 @@ function Dashboard() {
   const location = useLocation()
   const [messages, setMessages] = useState([GREETING])
   const [draft, setDraft] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [run, setRun] = useState(null)
+  const [running, setRunning] = useState(false)
   const logRef = useRef(null)
+  const pollRef = useRef(null)
   const seeded = useRef(false)
 
-  // auto-scroll to newest
   useEffect(() => {
     const el = logRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [messages, loading])
+  }, [messages, running])
 
-  async function sendText(text) {
-    const content = text.trim()
-    if (!content || loading) return
+  useEffect(() => () => clearInterval(pollRef.current), [])
 
-    const convo = [...messages, { role: 'user', content }]
-    // user message + empty assistant placeholder to stream into
-    setMessages([...convo, { role: 'assistant', content: '' }])
-    setDraft('')
-    setLoading(true)
+  function pushAgent(content, extra = {}) {
+    setMessages((m) => [...m, { role: 'assistant', content, ...extra }])
+  }
 
+  async function poll(runId) {
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: convo.map(({ role, content }) => ({ role, content })),
-        }),
-      })
-
-      if (!res.ok || !res.body) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || `Server error (${res.status})`)
-      }
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let acc = ''
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        acc += decoder.decode(value, { stream: true })
-        setMessages((m) => {
-          const copy = [...m]
-          copy[copy.length - 1] = { role: 'assistant', content: acc }
-          return copy
-        })
+      const res = await fetch(`/api/runs/${runId}`)
+      if (!res.ok) throw new Error(`status ${res.status}`)
+      const state = await res.json()
+      setRun(state)
+      if (TERMINAL.has(state.status)) {
+        clearInterval(pollRef.current)
+        setRunning(false)
+        const okStages = state.stages.filter((s) => s.status === 'ok').length
+        if (state.status === 'failed') {
+          pushAgent('⚠️ The pipeline failed. Check the stages on the canvas.', {
+            error: true,
+          })
+        } else {
+          const verb = state.status === 'partial' ? 'Partly done' : 'Done'
+          const name = state.spec?.project?.name
+          pushAgent(
+            `${verb} — ${okStages}/${state.stages.length} stages passed${
+              name ? ` for “${name}”` : ''
+            }. Spec, board stages, and downloads are on the canvas →`
+          )
+        }
       }
     } catch (err) {
-      setMessages((m) => {
-        const copy = [...m]
-        copy[copy.length - 1] = {
-          role: 'assistant',
-          content: `⚠️ ${err.message}`,
-          error: true,
-        }
-        return copy
-      })
-    } finally {
-      setLoading(false)
+      clearInterval(pollRef.current)
+      setRunning(false)
+      pushAgent(`⚠️ Lost the run: ${err.message}`, { error: true })
     }
   }
 
-  // seed the first message from the landing prompt, if any
+  async function startRun(idea) {
+    const text = idea.trim()
+    if (!text || running) return
+
+    setMessages((m) => [...m, { role: 'user', content: text }])
+    setDraft('')
+    setRunning(true)
+    setRun(null)
+
+    try {
+      const res = await fetch('/api/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idea: text }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.detail || `Server error (${res.status})`)
+      }
+      const { run_id } = await res.json()
+      pushAgent('On it — running the pipeline. Watch the stages on the canvas.')
+      clearInterval(pollRef.current)
+      pollRef.current = setInterval(() => poll(run_id), 900)
+      poll(run_id)
+    } catch (err) {
+      setRunning(false)
+      pushAgent(`⚠️ ${err.message}`, { error: true })
+    }
+  }
+
   useEffect(() => {
     if (seeded.current) return
     seeded.current = true
     const p = location.state?.prompt
-    if (p && p.trim()) sendText(p)
+    if (p && p.trim()) startRun(p)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const onSubmit = (e) => {
     e.preventDefault()
-    sendText(draft)
+    startRun(draft)
   }
 
-  const waiting =
-    loading && messages[messages.length - 1]?.content === ''
+  const artifacts = run
+    ? run.stages.flatMap((s) =>
+        Object.entries(s.artifacts || {}).map(([name, url]) => ({ name, url }))
+      )
+    : []
+  const blocks = run?.spec?.blocks || []
+  const componentCount = run?.bom?.rows?.length ?? blocks.length
 
   return (
     <div className="dash">
@@ -118,8 +147,10 @@ function Dashboard() {
             <span className="dash-name">PCBlarp</span>
           </Link>
           <span className="dash-sep">/</span>
-          <span className="dash-proj">untitled-board</span>
-          <span className="dash-badge">demo</span>
+          <span className="dash-proj">
+            {run?.spec?.project?.name || 'untitled-board'}
+          </span>
+          {run && <span className={`dash-badge st-${run.status}`}>{run.status}</span>}
         </div>
         <div className="dash-actions">
           <button className="dash-btn ghost" type="button">
@@ -146,14 +177,14 @@ function Dashboard() {
       </header>
 
       <div className="dash-body">
-        {/* left: AI chat */}
+        {/* left: chat that drives the pipeline */}
         <aside className="chat">
           <div className="chat-head">
             <ChipIcon />
             <div className="chat-head-meta">
               <span className="chat-title">PCB Agent</span>
               <span className="chat-status">
-                <span className="chat-dot" /> online · OpenAI
+                <span className="chat-dot" /> {running ? 'building…' : 'ready'}
               </span>
             </div>
           </div>
@@ -161,36 +192,35 @@ function Dashboard() {
           <div className="chat-log" ref={logRef}>
             {messages.map((m, i) => {
               const isAgent = m.role === 'assistant'
-              const isLast = i === messages.length - 1
-              const showTyping = isAgent && isLast && waiting
               return (
                 <div key={i} className={`msg msg-${isAgent ? 'agent' : 'user'}`}>
                   {isAgent && <ChipIcon className="msg-avatar" />}
-                  {showTyping ? (
-                    <div className="bubble typing">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  ) : (
-                    <div className={`bubble ${m.error ? 'bubble-error' : ''}`}>
-                      {m.content}
-                    </div>
-                  )}
+                  <div className={`bubble ${m.error ? 'bubble-error' : ''}`}>
+                    {m.content}
+                  </div>
                 </div>
               )
             })}
+            {running && (
+              <div className="msg msg-agent">
+                <ChipIcon className="msg-avatar" />
+                <div className="bubble typing">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+            )}
           </div>
 
-          {messages.length <= 1 && (
+          {messages.length <= 1 && !running && (
             <div className="chat-suggest">
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}
                   type="button"
                   className="suggest"
-                  onClick={() => sendText(s)}
-                  disabled={loading}
+                  onClick={() => startRun(s)}
                 >
                   {s}
                 </button>
@@ -203,67 +233,122 @@ function Dashboard() {
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
-              placeholder={loading ? 'Thinking…' : 'Describe your robot…'}
+              placeholder={running ? 'Building…' : 'Describe your device…'}
               spellCheck={false}
-              aria-label="Message the PCB agent"
-              disabled={loading}
+              aria-label="Describe your device"
+              disabled={running}
             />
             <button
               type="submit"
               className="chat-send"
-              aria-label="Send"
-              disabled={loading || !draft.trim()}
+              aria-label="Build"
+              disabled={running || !draft.trim()}
             >
               →
             </button>
           </form>
         </aside>
 
-        {/* right: canvas */}
+        {/* right: live pipeline + spec + downloads */}
         <main className="canvas">
           <div className="canvas-bar">
             <div className="tool-group">
-              <button className="tool active" type="button" title="Select">
-                ✛
-              </button>
-              <button className="tool" type="button" title="Pan">
-                ✋
-              </button>
+              <span className="canvas-label">Pipeline</span>
             </div>
             <div className="tool-group">
-              <button className="tool" type="button" title="Zoom out">
-                −
-              </button>
-              <span className="zoom">100%</span>
-              <button className="tool" type="button" title="Zoom in">
-                +
-              </button>
-              <button className="tool" type="button" title="Toggle grid">
-                ▦
-              </button>
-              <button className="tool" type="button" title="Fit to screen">
-                ⤢
-              </button>
+              {run && (
+                <span className={`run-status st-${run.status}`}>{run.status}</span>
+              )}
             </div>
           </div>
 
-          <div className="canvas-surface">
-            <div className="board-ghost" aria-hidden />
-            <div className="canvas-empty">
-              <ChipIcon className="empty-icon" />
-              <h2 className="empty-title">Canvas</h2>
-              <p className="empty-sub">
-                Your schematic &amp; 2-layer board will render here.
-              </p>
-              <p className="empty-hint">
-                Describe your robot in the chat to generate it.
-              </p>
-            </div>
+          <div className="canvas-surface run-surface">
+            {!run ? (
+              <div className="canvas-empty">
+                <ChipIcon className="empty-icon" />
+                <h2 className="empty-title">Canvas</h2>
+                <p className="empty-sub">
+                  Your spec, board stages &amp; fab files will appear here.
+                </p>
+                <p className="empty-hint">
+                  Describe a device in the chat to start a build.
+                </p>
+              </div>
+            ) : (
+              <div className="run-view">
+                {/* stages */}
+                <section className="run-card">
+                  <h3 className="run-h">Stages</h3>
+                  <div className="stages">
+                    {run.stages.map((s) => (
+                      <div className="stage-row" key={s.name}>
+                        <span className="stage-name">
+                          {STAGE_LABEL[s.name] || s.name}
+                        </span>
+                        <span className={`stage-badge bg-${s.status}`}>
+                          {s.status}
+                        </span>
+                        <span className="stage-meta">
+                          {s.attempts > 1 ? `${s.attempts}× · ` : ''}
+                          {s.duration_ms ? `${Math.round(s.duration_ms)}ms` : ''}
+                        </span>
+                        {s.error && <span className="stage-err">{s.error}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                {/* spec */}
+                {run.spec && (
+                  <section className="run-card">
+                    <h3 className="run-h">Spec</h3>
+                    <p className="run-summary">{run.spec.project?.summary}</p>
+                    {!!blocks.length && (
+                      <div className="block-chips">
+                        {blocks.map((b, i) => (
+                          <span className="block-chip" key={b.id || i}>
+                            {b.id || b.name || 'block'}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {run.spec.power?.source && (
+                      <p className="run-line">
+                        power: <b>{run.spec.power.source}</b>
+                      </p>
+                    )}
+                  </section>
+                )}
+
+                {/* downloads */}
+                {!!artifacts.length && (
+                  <section className="run-card">
+                    <h3 className="run-h">Downloads</h3>
+                    <div className="dl-list">
+                      {artifacts.map((a, i) => (
+                        <a
+                          key={i}
+                          className="dl"
+                          href={a.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          ↓ {a.name}
+                        </a>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="canvas-status">
-            <span>2-layer · 100 × 80 mm</span>
-            <span className="status-right">0 components · 0 nets · DRC —</span>
+            <span>{run?.spec?.project?.name || '2-layer · 100 × 80 mm'}</span>
+            <span className="status-right">
+              {componentCount} components · {artifacts.length} files ·{' '}
+              {run ? run.status : 'idle'}
+            </span>
           </div>
         </main>
       </div>

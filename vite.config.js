@@ -8,7 +8,9 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      '/api': 'http://localhost:8787',
+      // ChatPCB backend (manay) — pipeline runs + artifact downloads
+      '/api': 'http://localhost:8000',
+      '/artifacts': 'http://localhost:8000',
     },
   },
 })

@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "node server/index.js",
-    "dev:all": "concurrently -k -n web,api -c cyan,green \"npm:dev\" \"npm:server\"",
+    "backend": "cd backend && CHATPCB_MOCK_LLM=1 .venv/bin/uvicorn chatpcb.app:app --port 8000",
+    "dev:all": "concurrently -k -n web,api -c cyan,green \"npm:dev\" \"npm:backend\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
