@@ -1,0 +1,4 @@
+{
+  "dev": "npx vite",
+  "install": "npm install"
+}
