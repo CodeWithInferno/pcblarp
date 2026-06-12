@@ -1,0 +1,44 @@
+[project]
+name = "chatpcb"
+version = "0.1.0"
+description = "Natural-language hardware ideas to fabrication-ready PCB files (Gerbers, BOM, pick-and-place)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.7",
+    "anthropic>=0.40",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+cloud = [
+    "boto3>=1.34",            # S3 export + presigned URLs
+    "redis>=5.0",             # layout worker queue
+    "clickhouse-connect>=0.7" # telemetry sink
+]
+eda = [
+    # Real stage 3/4 implementations (schematic generation, placement, autoroute).
+    # Stages run mocked until this lands; all imports are guarded.
+    "kicad-tools",
+]
+sponsors = [
+    "composio>=0.7",          # share runs via GitHub/Gmail
+    "guildai>=0.9",           # experiment tracking
+    "psycopg[binary]>=3.1",   # Airbyte Postgres parts table
+]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["chatpcb"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

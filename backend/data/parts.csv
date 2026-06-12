@@ -1,0 +1,50 @@
+catalog_block,role,mpn,lcsc,description,package,unit_price_usd,stock
+mcu_esp32,main,ESP32-WROOM-32E-N4,C701341,WiFi+BT MCU module 4MB flash integrated antenna,SMD-38,2.40,5000
+mcu_esp32_s3,main,ESP32-S3-WROOM-1-N8,C2913202,WiFi+BLE5 MCU module 8MB flash USB-OTG,SMD-41,3.10,3200
+mcu_esp32_c3,main,ESP32-C3-MINI-1-N4,C2934560,BLE5+WiFi RISC-V MCU module small footprint,SMD-53,1.80,8000
+mcu_rp2040,main,RP2040,C2040,Dual Cortex-M0+ MCU 264KB SRAM,LQFN-56,0.80,12000
+mcu_rp2040,boot_flash,W25Q16JVUXIQ,C2843335,16Mbit QSPI NOR flash for RP2040 boot,USON-8,0.25,9000
+mcu_stm32f1,main,STM32F103C8T6,C8734,Cortex-M3 MCU 64KB flash,LQFP-48,1.60,4000
+mcu_atmega328,main,ATMEGA328P-AU,C14877,8-bit AVR MCU 32KB flash,TQFP-32,1.90,2500
+power_battery_lipo_1s,charger,TP4056,C16581,1S LiPo linear charger 1A,SOIC-8,0.12,50000
+power_battery_lipo_1s,protection,DW01A-G,C16618,1S LiPo protection IC,SOT-23-6,0.04,60000
+power_battery_lipo_1s,protection_fet,FS8205A,C16591,Dual N-MOSFET pair for DW01A,SOT-23-6,0.06,55000
+power_battery_lipo_1s,fuel_gauge,MAX17048G+T10,C143034,1S fuel gauge I2C,TDFN-8,1.20,900
+power_battery_lipo_1s,connector,S2B-PH-K-S,C173752,JST PH 2-pin battery connector,THT,0.08,30000
+power_battery_18650,holder,BH-18650-A1AJ005,C70377,18650 cell holder SMD,SMD,0.45,1200
+power_usb_c_input,connector,TYPE-C-31-M-12,C165948,USB-C 16P receptacle 5A,SMD,0.10,40000
+power_usb_c_input,esd,USBLC6-2SC6,C7519,USB ESD protection array,SOT-23-6,0.09,20000
+power_barrel_jack,connector,DC-005-2.0,C16214,2.1mm barrel jack,THT,0.07,15000
+power_ldo_3v3,main,AMS1117-3.3,C6186,3.3V 1A LDO,SOT-223,0.06,100000
+power_ldo_3v3,main,ME6211C33M5G,C82942,3.3V 500mA low-Iq LDO,SOT-23-5,0.05,80000
+power_ldo_5v,main,AMS1117-5.0,C6187,5V 1A LDO,SOT-223,0.06,30000
+power_buck_3v3,main,MP1584EN-LF-Z,C9205,3A adjustable buck converter,SOIC-8E,0.50,7000
+power_boost_5v,main,MT3608,C84817,2A boost converter,SOT-23-6,0.08,25000
+power_soft_latch_button,controller,MAX16054AZT+T,C677110,Push-button on/off controller,SOT-23-6,1.90,400
+power_soft_latch_button,button,TS-1187A-B-A-B,C318884,Tactile switch 6x6 SMD,SMD,0.03,90000
+sensor_mic_i2s_mems,main,INMP441,C190531,I2S MEMS microphone omnidirectional,LGA-6,1.50,1500
+sensor_mic_analog,main,MAX9814ETD+T,C190452,Analog mic amplifier with AGC,TDFN-14,1.70,600
+sensor_imu_i2c,main,MPU-6050,C24112,6-axis accel+gyro I2C,QFN-24,1.40,2200
+sensor_imu_i2c,main,LSM6DS3TR-C,C967633,6-axis IMU I2C/SPI low power,LGA-14,1.10,1800
+sensor_temp_humid_i2c,main,SHT31-DIS-B,C146789,Temp+humidity sensor I2C high accuracy,DFN-8,2.30,900
+sensor_temp_humid_i2c,main,AHT20,C2757850,Temp+humidity sensor I2C budget,DFN-8,0.45,6000
+sensor_light_i2c,main,BH1750FVI-TR,C78960,Ambient light sensor I2C,WSOF-6,0.55,3000
+sensor_hall,main,AH1815-P-A,C126663,Low-power omnipolar hall switch,SOT-23,0.18,5000
+sensor_pir,main,AS312,C90465,Mini PIR motion sensor,TO-5,1.20,800
+sensor_adc_generic,main,ADS1115IDGSR,C37593,16-bit 4-channel I2C ADC,MSOP-10,2.80,700
+ui_button_tactile,main,TS-1187A-B-A-B,C318884,Tactile switch 6x6 SMD,SMD,0.03,90000
+ui_led_status,main,LTST-C170GKT,C2286,Green LED 0805,0805,0.02,200000
+ui_led_rgb,main,WS2812B-B/T,C2761795,Addressable RGB LED,5050,0.05,150000
+ui_buzzer,main,MLT-8530,C94599,Magnetic buzzer 3.6V SMD,SMD,0.25,4000
+ui_oled_i2c_0_96,main,SSD1306-0.96-I2C,,0.96in 128x64 OLED module I2C,module,1.60,1000
+ui_tft_spi,main,ST7735S-1.8-SPI,,1.8in 128x160 TFT module SPI,module,2.90,600
+ui_rotary_encoder,main,EC11E18244A5,C470794,Rotary encoder with push switch,THT,0.90,1500
+ui_vibration_motor,main,VM1027-COIN,,Coin vibration motor 3V,module,0.60,2000
+comm_lora_module,main,RA-01,C90039,SX1278 LoRa module 433MHz,module,4.50,300
+comm_nrf24,main,NRF24L01P-R,C20622,2.4GHz transceiver,QFN-20,1.30,1100
+storage_microsd_spi,main,TF-115,C91145,microSD push-push socket,SMD,0.25,8000
+storage_flash_spi,main,W25Q128JVSIQ,C97521,128Mbit SPI NOR flash,SOIC-8,1.00,6000
+io_usb_serial_bridge,main,CP2102N-A02-GQFN28,C969151,USB-UART bridge,QFN-28,2.10,1300
+io_usb_serial_bridge,main,CH340C,C84681,USB-UART bridge budget,SOIC-16,0.45,20000
+io_debug_header_swd,main,FTSH-105-01-L-DV,,SWD 2x5 1.27mm header,SMD,1.80,500
+io_qwiic_connector,main,SM04B-SRSS-TB,C160404,JST SH 4-pin Qwiic connector,SMD,0.12,10000

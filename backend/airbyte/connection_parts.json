@@ -1,0 +1,16 @@
+{
+  "name": "lcsc-parts -> chatpcb-postgres",
+  "sourceId": "<source id from source_lcsc_csv>",
+  "destinationId": "<destination id from destination_postgres>",
+  "namespaceDefinition": "destination",
+  "scheduleType": "manual",
+  "configurations": {
+    "streams": [
+      {
+        "name": "parts",
+        "syncMode": "full_refresh_overwrite"
+      }
+    ]
+  },
+  "_comment": "Manual schedule on purpose: `make sync-parts` triggers it via POST {AIRBYTE_API_URL}/v1/jobs"
+}

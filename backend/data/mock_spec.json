@@ -1,0 +1,142 @@
+{
+  "spec_version": "1.0",
+  "status": "ok",
+  "project": {
+    "name": "ble-voice-streamer",
+    "summary": "Button-activated battery-powered BLE microphone that streams audio to an iPhone.",
+    "user_prompt_verbatim": "Make a small device with mic bluetooth and battery which on press of a button turns on and sends all recordings to iphone"
+  },
+  "feasibility": {
+    "overall": "viable_with_caveats",
+    "notes": "iPhone connectivity requires BLE, not classic Bluetooth SPP, which iOS blocks. ESP32 BLE throughput supports compressed voice-grade audio (~16kHz ADPCM), not hi-fi. Receiving audio on the iPhone requires a companion app; no stock iOS app ingests custom BLE audio streams.",
+    "risk_flags": ["ble_audio_bandwidth_limited", "requires_ios_companion_app"]
+  },
+  "assumptions": [
+    "Voice-grade 16 kHz mono audio is acceptable",
+    "'Sends all recordings' means live streaming while on, not stored file sync",
+    "500 mAh LiPo chosen for ~6 h active streaming",
+    "Button is a soft power latch: press to wake, long-press to off"
+  ],
+  "clarification_questions": [],
+  "constraints": {
+    "max_board_size_mm": [40, 30],
+    "target_battery_life_hours": 6,
+    "max_unit_cost_usd": null,
+    "enclosure_required": true,
+    "environment": "unspecified"
+  },
+  "power": {
+    "source": "battery_lipo_1s",
+    "battery_capacity_mah": 500,
+    "rails": [
+      {"voltage_v": 3.3, "regulator_block": "power_ldo_3v3", "loads": ["main_mcu", "mic"]}
+    ],
+    "budget_table": [
+      {"block": "main_mcu", "active_ma": 80, "sleep_ua": 10},
+      {"block": "mic", "active_ma": 1.5, "sleep_ua": 1},
+      {"block": "status_led", "active_ma": 5, "sleep_ua": 0}
+    ],
+    "estimated_active_hours": 5.8,
+    "sleep_strategy": "Hard power-off via soft latch; no standby drain beyond protection IC."
+  },
+  "blocks": [
+    {
+      "id": "main_mcu",
+      "catalog_block": "mcu_esp32_c3",
+      "purpose": "BLE radio + audio capture + encoding",
+      "supply_voltage_v": 3.3,
+      "interfaces": [{"type": "i2s", "pins_required": 3}],
+      "params": {},
+      "candidate_parts": [
+        {"mpn": "ESP32-C3-MINI-1", "verified": false, "why": "BLE5, small, integrated antenna"}
+      ]
+    },
+    {
+      "id": "mic",
+      "catalog_block": "sensor_mic_i2s_mems",
+      "purpose": "Audio capture",
+      "supply_voltage_v": 3.3,
+      "interfaces": [{"type": "i2s", "pins_required": 3}],
+      "params": {"sample_rate_hz": 16000},
+      "candidate_parts": [
+        {"mpn": "INMP441", "verified": false, "why": "Common I2S MEMS mic"}
+      ]
+    },
+    {
+      "id": "battery",
+      "catalog_block": "power_battery_lipo_1s",
+      "purpose": "Power + USB-C charging + protection",
+      "supply_voltage_v": 3.7,
+      "interfaces": [],
+      "params": {"capacity_mah": 500},
+      "candidate_parts": []
+    },
+    {
+      "id": "rail_3v3",
+      "catalog_block": "power_ldo_3v3",
+      "purpose": "3.3V rail",
+      "supply_voltage_v": 3.3,
+      "interfaces": [],
+      "params": {"min_output_ma": 200},
+      "candidate_parts": []
+    },
+    {
+      "id": "power_button",
+      "catalog_block": "power_soft_latch_button",
+      "purpose": "Press on, long-press off",
+      "supply_voltage_v": 3.3,
+      "interfaces": [{"type": "gpio", "pins_required": 2}],
+      "params": {},
+      "candidate_parts": []
+    },
+    {
+      "id": "status_led",
+      "catalog_block": "ui_led_status",
+      "purpose": "Power/connection state",
+      "supply_voltage_v": 3.3,
+      "interfaces": [{"type": "gpio", "pins_required": 1}],
+      "params": {},
+      "candidate_parts": []
+    },
+    {
+      "id": "usb",
+      "catalog_block": "power_usb_c_input",
+      "purpose": "Charging input",
+      "supply_voltage_v": 5.0,
+      "interfaces": [],
+      "params": {},
+      "candidate_parts": []
+    }
+  ],
+  "connections": [
+    {"from_block": "mic", "to_block": "main_mcu", "interface": "i2s", "notes": "SCK/WS/SD"},
+    {"from_block": "battery", "to_block": "rail_3v3", "interface": "power", "notes": "via protection output"},
+    {"from_block": "rail_3v3", "to_block": "main_mcu", "interface": "power", "notes": ""},
+    {"from_block": "usb", "to_block": "battery", "interface": "power", "notes": "charge path"},
+    {"from_block": "power_button", "to_block": "main_mcu", "interface": "gpio", "notes": "latch control + wake"}
+  ],
+  "mcu_requirements": {
+    "chosen_block": "mcu_esp32_c3",
+    "min_gpio_required": 7,
+    "peripherals_required": ["i2s", "ble"],
+    "why": "Needs BLE radio and I2S in a small low-power package; C3 is the smallest catalog ESP32 with both."
+  },
+  "firmware_outline": {
+    "behavior_summary": "On wake: init I2S, advertise BLE, on connect stream ADPCM-encoded 16kHz mono audio via GATT notifications.",
+    "states": ["off", "advertising", "connected_streaming", "low_battery"],
+    "key_libraries": ["ESP-IDF i2s driver", "NimBLE"]
+  },
+  "out_of_scope_dependencies": [
+    "iOS companion app to receive and decode the BLE audio stream",
+    "Enclosure design",
+    "FCC/CE certification if sold commercially"
+  ],
+  "test_plan_bringup": [
+    "Verify 3.3V rail with USB power before installing battery",
+    "Verify charge IC charges battery and protection cutoffs work",
+    "Flash blink test, confirm boot",
+    "Confirm BLE advertising visible from phone",
+    "Verify I2S mic data is nonzero and responds to sound",
+    "Full stream test against companion app"
+  ]
+}

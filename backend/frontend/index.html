@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChatPCB</title>
+<style>
+  /* Minimal styling on purpose; will be restyled with OpenUI later. */
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; max-width: 880px; padding: 24px;
+    background: #101418; color: #dde3ea;
+    font: 15px/1.5 ui-sans-serif, system-ui, sans-serif;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #8b97a5; margin: 0 0 20px; }
+  textarea {
+    width: 100%; min-height: 90px; padding: 12px; border-radius: 8px;
+    border: 1px solid #2a3441; background: #161c24; color: inherit;
+    font: inherit; resize: vertical;
+  }
+  button {
+    margin-top: 10px; padding: 10px 22px; border: 0; border-radius: 8px;
+    background: #3b82f6; color: #fff; font: inherit; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: wait; }
+  section { margin-top: 28px; }
+  h2 { font-size: 15px; color: #8b97a5; text-transform: uppercase;
+       letter-spacing: .06em; margin: 0 0 10px; }
+  .stage { display: flex; gap: 10px; align-items: baseline; padding: 6px 0;
+           border-bottom: 1px solid #1d2530; }
+  .stage .name { width: 110px; font-weight: 600; }
+  .badge { padding: 1px 9px; border-radius: 99px; font-size: 12px; }
+  .badge.pending  { background: #232b36; color: #8b97a5; }
+  .badge.running  { background: #1d3a5f; color: #7cb3ff; }
+  .badge.ok       { background: #14391f; color: #6ee787; }
+  .badge.failed   { background: #46201f; color: #ff8580; }
+  .badge.skipped  { background: #2e2a1c; color: #d9b35d; }
+  .meta { color: #8b97a5; font-size: 13px; }
+  .error { color: #ff8580; font-size: 13px; }
+  ul { margin: 6px 0; padding-left: 20px; }
+  a { color: #7cb3ff; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 10px 4px 0;
+           border-bottom: 1px solid #1d2530; }
+  th { color: #8b97a5; font-weight: 600; }
+  #events { font-family: ui-monospace, monospace; font-size: 12px;
+            color: #8b97a5; max-height: 160px; overflow-y: auto;
+            background: #161c24; border-radius: 8px; padding: 10px; }
+  .cards { display: flex; gap: 14px; flex-wrap: wrap; }
+  .card { background: #161c24; border: 1px solid #2a3441; border-radius: 8px;
+          padding: 10px 16px; min-width: 130px; }
+  .card .num { font-size: 22px; font-weight: 700; }
+  .card .label { color: #8b97a5; font-size: 12px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+  <h1>ChatPCB</h1>
+  <p class="sub">Describe a device. Get fabrication-ready PCB files.</p>
+
+  <textarea id="idea" placeholder="Make a small device with a mic, bluetooth and a battery which on press of a button turns on and sends all recordings to my iPhone"></textarea>
+  <button id="build">Build it</button>
+
+  <section id="run-section" class="hidden">
+    <h2>Pipeline <span id="run-status" class="badge pending"></span></h2>
+    <div id="stages"></div>
+    <div id="events"></div>
+  </section>
+
+  <section id="spec-section" class="hidden">
+    <h2>Spec</h2>
+    <div id="spec"></div>
+  </section>
+
+  <section id="artifacts-section" class="hidden">
+    <h2>Downloads</h2>
+    <ul id="artifacts"></ul>
+    <button id="share">Share (GitHub + Gmail via Composio)</button>
+    <span id="share-result" class="meta"></span>
+  </section>
+
+  <section id="dashboard-section">
+    <h2>Dashboard <span class="meta" id="dash-backend"></span></h2>
+    <div class="cards" id="dash-cards"></div>
+    <div id="dash-stages" style="margin-top:12px"></div>
+  </section>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
+  (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let pollTimer = null;
+let currentRunId = null;
+
+$("build").addEventListener("click", async () => {
+  const idea = $("idea").value.trim();
+  if (!idea) return;
+  $("build").disabled = true;
+  const res = await fetch("/api/runs", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({idea}),
+  });
+  if (!res.ok) { $("build").disabled = false; alert("failed to start run"); return; }
+  const {run_id} = await res.json();
+  $("run-section").classList.remove("hidden");
+  currentRunId = run_id;
+  clearInterval(pollTimer);
+  pollTimer = setInterval(() => poll(run_id), 800);
+  poll(run_id);
+});
+
+function stopPolling() {
+  clearInterval(pollTimer);
+  $("build").disabled = false;
+}
+
+async function poll(runId) {
+  const res = await fetch(`/api/runs/${runId}`);
+  if (runId !== currentRunId) return; // stale response from a previous run
+  if (!res.ok) {
+    // run lost (e.g. server restarted; runs are in-memory): stop politely
+    stopPolling();
+    const badge = $("run-status");
+    badge.textContent = `run lost (${res.status})`;
+    badge.className = "badge failed";
+    return;
+  }
+  const state = await res.json();
+  render(state);
+  if (!["queued", "running"].includes(state.status)) {
+    stopPolling();
+    loadDashboard();
+  }
+}
+
+function render(state) {
+  const badge = $("run-status");
+  badge.textContent = state.status +
+    (state.revision_count ? ` (rev ${state.revision_count})` : "");
+  badge.className = "badge " + ({done: "ok", partial: "skipped",
+    failed: "failed", running: "running", queued: "pending"}[state.status] || "pending");
+
+  $("stages").innerHTML = state.stages.map((s) => `
+    <div class="stage">
+      <span class="name">${esc(s.name)}</span>
+      <span class="badge ${esc(s.status)}">${esc(s.status)}</span>
+      <span class="meta">${s.attempts ? s.attempts + "x" : ""}
+        ${s.duration_ms ? Math.round(s.duration_ms) + "ms" : ""}</span>
+      ${s.error ? `<span class="error">${esc(s.error)}</span>` : ""}
+    </div>`).join("");
+
+  $("events").innerHTML = state.events.map((e) => esc(e)).join("<br>");
+  $("events").scrollTop = $("events").scrollHeight;
+
+  if (state.spec) {
+    $("spec-section").classList.remove("hidden");
+    const sp = state.spec;
+    $("spec").innerHTML = `
+      <p><strong>${esc(sp.project.name)}</strong>: ${esc(sp.project.summary)}</p>
+      ${sp.status !== "ok" ? `<p class="error">spec status: ${esc(sp.status)}</p>` : ""}
+      ${sp.clarification_questions.length
+        ? `<ul>${sp.clarification_questions.map((q) => `<li class="error">${esc(q)}</li>`).join("")}</ul>` : ""}
+      <p class="meta">feasibility: ${esc(sp.feasibility.overall)}.
+         ${esc(sp.feasibility.notes)}</p>
+      ${sp.feasibility.risk_flags.length
+        ? `<p class="meta">risks: ${sp.feasibility.risk_flags.map(esc).join(", ")}</p>` : ""}
+      <details><summary class="meta">assumptions (${sp.assumptions.length})</summary>
+        <ul>${sp.assumptions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>
+      </details>
+      ${state.bom ? bomTable(state.bom) : ""}`;
+  }
+
+  const exportStage = state.stages.find((s) => s.name === "export");
+  const artifacts = exportStage ? exportStage.artifacts : {};
+  if (Object.keys(artifacts || {}).length) {
+    $("artifacts-section").classList.remove("hidden");
+    $("artifacts").innerHTML = Object.entries(artifacts)
+      .map(([name, url]) => `<li><a href="${esc(url)}" download>${esc(name)}</a></li>`)
+      .join("");
+  }
+}
+
+function bomTable(bom) {
+  const rows = bom.bom.map((l) => `
+    <tr><td>${esc(l.block_id)}</td><td>${esc(l.role)}</td>
+        <td>${esc(l.mpn ?? "(" + l.status + ")")}</td>
+        <td>${esc(l.lcsc ?? "")}</td>
+        <td>${l.unit_price_usd != null ? "$" + l.unit_price_usd.toFixed(2) : ""}</td></tr>`)
+    .join("");
+  const notes = bom.kb_notes?.length
+    ? `<p class="meta">knowledge layer: ${esc(bom.kb_notes.join(" | ").slice(0, 400))}</p>`
+    : "";
+  return `<details open><summary class="meta">BOM
+      (${bom.bom.length} lines, est. $${bom.total_cost_usd.toFixed(2)}/unit)</summary>
+    <table><tr><th>block</th><th>role</th><th>part</th><th>LCSC</th><th>price</th></tr>
+    ${rows}</table>${notes}</details>`;
+}
+
+$("share").addEventListener("click", async () => {
+  if (!currentRunId) return;
+  $("share").disabled = true;
+  $("share-result").textContent = "sharing...";
+  try {
+    const res = await fetch(`/api/runs/${currentRunId}/share`, {method: "POST"});
+    const data = await res.json().catch(() => ({}));
+    $("share-result").textContent = res.ok
+      ? summarizeShare(data)
+      : `share failed (${res.status})`;
+  } catch (err) {
+    $("share-result").textContent = "share failed: server unreachable";
+  } finally {
+    $("share").disabled = false;
+  }
+});
+
+function summarizeShare(d) {
+  if (d.status === "skipped") return `skipped: ${d.reason}`;
+  const gh = d.github?.repo_url || d.github?.repo || d.github?.error || "n/a";
+  const gm = d.gmail?.to || d.gmail?.reason || d.gmail?.error || "n/a";
+  return `github: ${gh} | gmail: ${gm}`;
+}
+
+async function loadDashboard() {
+  const res = await fetch("/api/dashboard");
+  if (!res.ok) return;
+  const d = await res.json();
+  $("dash-backend").textContent = `(${d.backend})`;
+  const cards = [
+    ["runs", d.total_runs],
+    ["attempts", d.total_attempts],
+    ["retries", d.total_retries],
+    ["avg DRC violations", d.avg_drc_violations ?? "n/a"],
+    ["avg routing %", d.avg_routing_completion_pct ?? "n/a"],
+  ];
+  $("dash-cards").innerHTML = cards.map(([label, num]) => `
+    <div class="card"><div class="num">${esc(num)}</div>
+      <div class="label">${esc(label)}</div></div>`).join("");
+  const stages = Object.entries(d.stages || {});
+  $("dash-stages").innerHTML = stages.length ? `
+    <table><tr><th>stage</th><th>attempts</th><th>ok</th><th>failed</th>
+      <th>avg ms</th></tr>
+    ${stages.map(([name, s]) => `<tr><td>${esc(name)}</td><td>${s.attempts}</td>
+      <td>${s.ok}</td><td>${s.failed}</td><td>${s.avg_duration_ms}</td></tr>`).join("")}
+    </table>` : "";
+}
+
+loadDashboard();
+</script>
+</body>
+</html>

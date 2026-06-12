@@ -1,0 +1,15 @@
+{
+  "name": "lcsc-parts-csv",
+  "sourceType": "file",
+  "configuration": {
+    "dataset_name": "parts",
+    "format": "csv",
+    "url": "https://example.com/exports/lcsc_parts_export.csv",
+    "provider": {
+      "storage": "HTTPS",
+      "user_agent": false
+    },
+    "reader_options": "{\"header\": 0}"
+  },
+  "_comment": "Swap url for the real LCSC export; columns must match data/parts.csv: catalog_block, role, mpn, lcsc, description, package, unit_price_usd, stock"
+}
