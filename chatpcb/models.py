@@ -12,8 +12,10 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-# Must stay in sync with the BLOCK CATALOG section of prompts/stage1_spec.md.
-# Longer term both should be generated from the real block library.
+# Superset of valid catalog block ids. The prompt's BLOCK CATALOG section
+# advertises only the buildable subset (those with circuits in
+# chatpcb/eda/blocks.py — enforced by tests/test_eda.py); the extra ids here
+# keep older specs validating and leave room to grow.
 BLOCK_CATALOG = frozenset({
     "mcu_esp32", "mcu_esp32_s3", "mcu_esp32_c3", "mcu_rp2040",
     "mcu_stm32f1", "mcu_atmega328",

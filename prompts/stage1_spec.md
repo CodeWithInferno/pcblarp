@@ -53,17 +53,16 @@ than creativity.
 
 # BLOCK CATALOG (the only building blocks downstream can instantiate)
 
-mcu_esp32 | mcu_esp32_s3 | mcu_esp32_c3 | mcu_rp2040 | mcu_stm32f1 | mcu_atmega328
-power_battery_lipo_1s (TP4056-class charge + protection + fuel gauge option)
+mcu_esp32 | mcu_esp32_s3 | mcu_esp32_c3
+power_battery_lipo_1s (MCP73831-class charge; pack must carry protection)
 power_battery_18650 | power_usb_c_input | power_barrel_jack
-power_ldo_3v3 | power_ldo_5v | power_buck_3v3 | power_boost_5v
+power_ldo_3v3 | power_buck_3v3
 power_soft_latch_button (momentary button = on/off power control)
-sensor_mic_i2s_mems | sensor_mic_analog | sensor_imu_i2c | sensor_temp_humid_i2c
-sensor_light_i2c | sensor_hall | sensor_pir | sensor_adc_generic
+sensor_mic_i2s_mems | sensor_imu_i2c | sensor_temp_humid_i2c
+sensor_pir (3.3V module header) | sensor_adc_generic (analog input header, 0-3.3V)
 ui_button_tactile | ui_led_status | ui_led_rgb | ui_buzzer | ui_oled_i2c_0_96
-ui_tft_spi | ui_rotary_encoder | ui_vibration_motor
-comm_ble_builtin (uses MCU radio) | comm_wifi_builtin | comm_lora_module
-comm_nrf24 | storage_microsd_spi | storage_flash_spi
+comm_ble_builtin (uses MCU radio) | comm_wifi_builtin
+storage_flash_spi
 io_usb_serial_bridge | io_debug_header_swd | io_qwiic_connector
 
 # JSON SCHEMA

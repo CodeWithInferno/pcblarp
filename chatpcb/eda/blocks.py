@@ -271,6 +271,27 @@ _define("sensor_temp_humid_i2c", CircuitDef(
     groups={"i2c": ["SDA", "SCL"]},
 ))
 
+_define("sensor_pir", CircuitDef(
+    parts=[
+        PartDef("J", "Connector_Generic:Conn_01x03", "PIR_AM312",
+                {"1": "+3V3", "2": "@OUT", "3": "GND"},
+                "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"),
+    ],
+    groups={"gpio": ["OUT"]},
+    notes=["header for a 3.3V PIR module (AM312-class); 5V-only HC-SR501 "
+           "modules need the 5V rail"],
+))
+
+_define("sensor_adc_generic", CircuitDef(
+    parts=[
+        PartDef("J", "Connector_Generic:Conn_01x03", "ANALOG_IN",
+                {"1": "+3V3", "2": "@SIG", "3": "GND"},
+                "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical"),
+    ],
+    groups={"adc": ["SIG"], "gpio": ["SIG"]},
+    notes=["generic analog sensor header; keep the signal within 0-3.3V"],
+))
+
 _define("sensor_mic_i2s_mems", CircuitDef(
     parts=[
         PartDef("U", "Sensor_Audio:ICS-43434", "ICS-43434", {

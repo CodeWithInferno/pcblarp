@@ -136,3 +136,20 @@ def test_assembly_bom_covers_every_component(design):
     rows = assembly_bom(design)
     total = sum(row["qty"] for row in rows)
     assert total == len(design.components)
+
+
+def test_prompt_catalog_only_advertises_buildable_blocks():
+    """Every block in the stage-1 prompt's BLOCK CATALOG must have a real
+    circuit, so Claude can never pick one the schematic stage rejects."""
+    from chatpcb.models import BLOCK_CATALOG
+    prompt = (Path(__file__).parent.parent / "prompts" /
+              "stage1_spec.md").read_text()
+    section = prompt.split("# BLOCK CATALOG")[1].split("# JSON SCHEMA")[0]
+    advertised = {
+        token for token in
+        section.replace("|", " ").split()
+        if token in BLOCK_CATALOG
+    }
+    assert advertised, "failed to parse any blocks out of the prompt"
+    missing = advertised - set(CIRCUITS)
+    assert not missing, f"prompt advertises blocks without circuits: {missing}"
