@@ -26,7 +26,7 @@ def complete(
     system: str,
     messages: list[dict],
     *,
-    max_tokens: int = 4000,
+    max_tokens: int = 16000,
     temperature: float = 0.0,
 ) -> str:
     """One non-streaming Messages API call; returns concatenated text blocks."""
@@ -70,6 +70,12 @@ def complete(
         # e.g. "Could not resolve authentication method" when no key is set;
         # must become LLMError so the stage retry/failure path engages.
         raise LLMError(f"Claude client setup failed: {exc}") from exc
+
+    if response.stop_reason == "max_tokens":
+        raise LLMError(
+            f"response truncated at max_tokens={max_tokens}; the spec JSON "
+            "did not fit. Raise max_tokens in llm.complete()."
+        )
 
     return "".join(
         block.text for block in response.content if block.type == "text"
