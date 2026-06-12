@@ -44,6 +44,21 @@ def anthropic_model() -> str:
     return env("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
 
+def llm_provider() -> str:
+    """Which LLM backs stage 1. Explicit via CHATPCB_LLM_PROVIDER, else auto:
+    use OpenAI when only an OpenAI key is present, otherwise Anthropic."""
+    explicit = (env("CHATPCB_LLM_PROVIDER") or "").strip().lower()
+    if explicit in {"openai", "anthropic"}:
+        return explicit
+    if env("OPENAI_API_KEY") and not (env("ANTHROPIC_API_KEY") or env("TF_GATEWAY_URL")):
+        return "openai"
+    return "anthropic"
+
+
+def openai_model() -> str:
+    return env("OPENAI_MODEL", "gpt-4o-mini")
+
+
 def max_stage_attempts() -> int:
     return int(env("CHATPCB_MAX_STAGE_ATTEMPTS", "3"))
 

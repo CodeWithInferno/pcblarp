@@ -33,6 +33,11 @@ def complete(
     if config.flag("CHATPCB_MOCK_LLM"):
         return (config.DATA_DIR / "mock_spec.json").read_text()
 
+    if config.llm_provider() == "openai":
+        return _complete_openai(
+            system, messages, max_tokens=max_tokens, temperature=temperature
+        )
+
     import anthropic
 
     base_url = config.env("TF_GATEWAY_URL")
@@ -80,3 +85,53 @@ def complete(
     return "".join(
         block.text for block in response.content if block.type == "text"
     )
+
+
+def _complete_openai(
+    system: str,
+    messages: list[dict],
+    *,
+    max_tokens: int,
+    temperature: float,
+) -> str:
+    """OpenAI Chat Completions path. The Anthropic-style (system, messages)
+    shape maps directly: system becomes a system message, the rest pass
+    through. JSON mode is requested since stage 1 must emit a JSON object."""
+    try:
+        from openai import OpenAI
+    except ImportError as exc:  # pragma: no cover
+        raise LLMError(
+            "openai package not installed; `pip install openai`"
+        ) from exc
+
+    api_key = config.env("OPENAI_API_KEY")
+    if not api_key:
+        raise LLMError("OPENAI_API_KEY is not set")
+
+    base_url = config.env("OPENAI_BASE_URL")
+    client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(
+        api_key=api_key
+    )
+
+    oai_messages = [{"role": "system", "content": system}]
+    for m in messages:
+        oai_messages.append({"role": m["role"], "content": m["content"]})
+
+    try:
+        response = client.chat.completions.create(
+            model=config.openai_model(),
+            messages=oai_messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            response_format={"type": "json_object"},
+        )
+    except Exception as exc:  # openai raises a variety of API errors
+        raise LLMError(f"OpenAI API call failed: {exc}") from exc
+
+    choice = response.choices[0]
+    if choice.finish_reason == "length":
+        raise LLMError(
+            f"response truncated at max_tokens={max_tokens}; the spec JSON "
+            "did not fit. Raise max_tokens in llm.complete()."
+        )
+    return choice.message.content or ""
