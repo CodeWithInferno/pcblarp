@@ -198,6 +198,9 @@ class PartsResult(BaseModel):
     bom: list[BomLine]
     unmatched_blocks: list[str]
     total_cost_usd: float
+    # Design-rule / selection context pulled from the Senso knowledge layer
+    # when blocks could not be matched; feeds the spec revision prompt.
+    kb_notes: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

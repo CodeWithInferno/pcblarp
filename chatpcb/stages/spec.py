@@ -30,6 +30,26 @@ def load_system_prompt() -> str:
     return (config.PROMPTS_DIR / "stage1_spec.md").read_text()
 
 
+def _system_prompt_with_rules(query: str) -> str:
+    """System prompt plus a <design_rules> block from the Senso knowledge
+    layer (local markdown fallback). Senso must never block stage 1."""
+    system = load_system_prompt()
+    try:
+        from ..integrations import senso_kb
+
+        rules = senso_kb.design_rules_context(query)
+    except Exception:
+        rules = ""
+    if rules:
+        system += (
+            "\n\n<design_rules>\n"
+            "Manufacturer design rules and parts context relevant to this "
+            "request; respect them when choosing blocks and constraints.\n"
+            f"{rules}\n</design_rules>"
+        )
+    return system
+
+
 def _strip_fences(text: str) -> str:
     """The prompt forbids markdown fences, but be lenient when parsing."""
     text = text.strip()
@@ -53,7 +73,7 @@ def parse_spec(raw: str) -> Spec:
 
 def generate_spec(idea: str, *, log_attempt: AttemptLogger) -> tuple[Spec, int]:
     """Returns (spec, attempts_used). Raises StageError after max attempts."""
-    system = load_system_prompt()
+    system = _system_prompt_with_rules(idea)
     messages: list[dict] = [{"role": "user", "content": idea}]
     last_error = "no attempts made"
 
@@ -104,7 +124,7 @@ def revise_spec_with_error(
     response does not abort the whole revision loop. Raises SpecParseError
     after max attempts."""
     log = log_attempt or (lambda *a, **k: None)
-    system = load_system_prompt()
+    system = _system_prompt_with_rules(f"{stage} stage failure: {error}")
     messages: list[dict] = [{
         "role": "user",
         "content": (

@@ -21,6 +21,7 @@ except ImportError:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROMPTS_DIR = REPO_ROOT / "prompts"
 DATA_DIR = REPO_ROOT / "data"
+DOCS_DIR = REPO_ROOT / "docs"
 FRONTEND_DIR = REPO_ROOT / "frontend"
 
 

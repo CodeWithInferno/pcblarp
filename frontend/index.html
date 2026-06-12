@@ -77,6 +77,8 @@
   <section id="artifacts-section" class="hidden">
     <h2>Downloads</h2>
     <ul id="artifacts"></ul>
+    <button id="share">Share (GitHub + Gmail via Composio)</button>
+    <span id="share-result" class="meta"></span>
   </section>
 
   <section id="dashboard-section">
@@ -188,10 +190,37 @@ function bomTable(bom) {
         <td>${esc(l.lcsc ?? "")}</td>
         <td>${l.unit_price_usd != null ? "$" + l.unit_price_usd.toFixed(2) : ""}</td></tr>`)
     .join("");
+  const notes = bom.kb_notes?.length
+    ? `<p class="meta">knowledge layer: ${esc(bom.kb_notes.join(" | ").slice(0, 400))}</p>`
+    : "";
   return `<details open><summary class="meta">BOM
       (${bom.bom.length} lines, est. $${bom.total_cost_usd.toFixed(2)}/unit)</summary>
     <table><tr><th>block</th><th>role</th><th>part</th><th>LCSC</th><th>price</th></tr>
-    ${rows}</table></details>`;
+    ${rows}</table>${notes}</details>`;
+}
+
+$("share").addEventListener("click", async () => {
+  if (!currentRunId) return;
+  $("share").disabled = true;
+  $("share-result").textContent = "sharing...";
+  try {
+    const res = await fetch(`/api/runs/${currentRunId}/share`, {method: "POST"});
+    const data = await res.json().catch(() => ({}));
+    $("share-result").textContent = res.ok
+      ? summarizeShare(data)
+      : `share failed (${res.status})`;
+  } catch (err) {
+    $("share-result").textContent = "share failed: server unreachable";
+  } finally {
+    $("share").disabled = false;
+  }
+});
+
+function summarizeShare(d) {
+  if (d.status === "skipped") return `skipped: ${d.reason}`;
+  const gh = d.github?.repo_url || d.github?.repo || d.github?.error || "n/a";
+  const gm = d.gmail?.to || d.gmail?.reason || d.gmail?.error || "n/a";
+  return `github: ${gh} | gmail: ${gm}`;
 }
 
 async function loadDashboard() {

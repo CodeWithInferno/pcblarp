@@ -1,0 +1,13 @@
+{
+  "name": "chatpcb-postgres",
+  "destinationType": "postgres",
+  "configuration": {
+    "host": "<postgres-host>",
+    "port": 5432,
+    "database": "chatpcb",
+    "schema": "public",
+    "username": "airbyte",
+    "password": "<from Airbyte secrets>",
+    "ssl_mode": { "mode": "prefer" }
+  }
+}

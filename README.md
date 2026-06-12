@@ -22,11 +22,34 @@ make demo        # full pipeline, mocked Claude + mocked stages, no API key
 make demo-ui     # same, behind the web UI at http://localhost:8000
 make demo-partial# layout fails on purpose: shows retries + partial results
 make demo-live   # real Claude stage 1 (set ANTHROPIC_API_KEY or TF_* vars)
+make sync-parts  # Airbyte LCSC sync, or local SQLite seed when unconfigured
+make ingest-kb   # push design rules + datasheet snippets into Senso
 ```
 
 Every run stays demo-able: export packages whatever exists (spec.json after
 stage 1, bom.csv after stage 2, and so on), so a failed layout still gives
 you download links and a BOM on screen.
+
+## Sponsor tech
+
+| Sponsor | Used for | Where |
+|---|---|---|
+| Anthropic Claude | Stage 1 spec compiler + error-feedback revision loop | `chatpcb/stages/spec.py` |
+| TrueFoundry | Gateway for all Claude calls (`TF_GATEWAY_URL`) | `chatpcb/llm.py` |
+| Composio | Share button: GitHub repo push + Gmail order summary | `chatpcb/integrations/composio_actions.py` |
+| Senso | Design-rules knowledge layer injected into prompts | `chatpcb/integrations/senso_kb.py` |
+| Guild.ai | Experiment tracking per pipeline run | `chatpcb/integrations/guild_tracking.py` |
+| Airbyte | LCSC catalog sync into the parts table | `airbyte/`, `chatpcb/integrations/airbyte_lcsc.py` |
+| ClickHouse | Per-attempt pipeline telemetry + dashboard | `chatpcb/telemetry.py` |
+| Jua | Climate notes appended to outdoor specs | `chatpcb/integrations/jua.py` |
+| Render | API + worker deployment blueprint | `render.yaml` |
+| Nebius | Heavy autorouting worker host | `chatpcb/worker.py`, `docker/worker.Dockerfile` |
+| OpenUI | Frontend restyle (planned; UI kept minimal for it) | `frontend/index.html` |
+| PCBWay | Manufacturing DRC profile + capabilities doc | `chatpcb/stages/layout.py`, `docs/pcbway_capabilities.md` |
+
+Each integration is an isolated module that degrades gracefully (env vars
+unset = skip or local fallback), so the core pipeline never blocks on a
+sponsor service. Install the optional SDKs with `pip install -e ".[sponsors]"`.
 
 ## Stage status
 

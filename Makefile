@@ -3,7 +3,7 @@ UV := $(shell command -v uv 2>/dev/null)
 VENV := .venv
 IDEA ?= Make a small device with mic bluetooth and battery which on press of a button turns on and sends all recordings to iphone
 
-.PHONY: install run test demo demo-partial demo-live demo-ui worker docker-worker clean
+.PHONY: install run test demo demo-partial demo-live demo-ui worker docker-worker sync-parts ingest-kb clean
 
 install:
 ifdef UV
@@ -35,6 +35,12 @@ demo-ui:  ## mocked pipeline behind the web UI
 
 worker:  ## layout worker (needs REDIS_URL)
 	$(VENV)/bin/python -m chatpcb.worker
+
+sync-parts:  ## trigger the Airbyte LCSC sync (AIRBYTE_* env), or seed local SQLite from data/parts.csv
+	$(VENV)/bin/python -m chatpcb.integrations.airbyte_lcsc
+
+ingest-kb:  ## push pcbway capabilities + parts datasheet snippets into Senso (needs SENSO_API_KEY)
+	$(VENV)/bin/python -m chatpcb.integrations.senso_kb
 
 docker-worker:
 	docker build -f docker/worker.Dockerfile -t chatpcb-worker .

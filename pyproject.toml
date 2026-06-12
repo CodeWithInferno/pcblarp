@@ -23,6 +23,11 @@ eda = [
     # Stages run mocked until this lands; all imports are guarded.
     "kicad-tools",
 ]
+sponsors = [
+    "composio>=0.7",          # share runs via GitHub/Gmail
+    "guildai>=0.9",           # experiment tracking
+    "psycopg[binary]>=3.1",   # Airbyte Postgres parts table
+]
 dev = [
     "pytest>=8.0",
     "httpx>=0.27",

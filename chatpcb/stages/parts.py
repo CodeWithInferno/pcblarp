@@ -1,30 +1,46 @@
 """Stage 2: match spec blocks to real parts.
 
-The parts table is data/parts.csv, a hand-seeded stand-in for the LCSC
-catalog. Production plan: Airbyte syncs LCSC into the warehouse and this
-table is regenerated from it, so keep the column set boring.
+The parts table comes from the Airbyte-synced LCSC catalog when PARTS_DB_URL
+is set (see airbyte/ and `make sync-parts`); data/parts.csv is the seed/
+fallback so the stage never blocks on the database. Keep the column set
+identical in both.
 
 Some catalog blocks need several physical parts (a LiPo block is charger +
 protection + FET + connector), so rows carry a `role`. Per (catalog_block,
 role) we prefer a part hinted in the spec's candidate_parts, else the
 cheapest in-stock row. Unmatched blocks do not fail the stage; they are
-reported so the demo always shows partial results.
+reported (with Senso knowledge-layer notes when available) so the demo
+always shows partial results and the revision loop has context.
 """
 
 from __future__ import annotations
 
 import csv
+import logging
 from pathlib import Path
 
 from .. import config
 from ..models import BomLine, PartsResult, Spec
 from . import injected_failure
 
+log = logging.getLogger(__name__)
+
 # These use the MCU module's radio; no BOM line needed.
 INTEGRATED_BLOCKS = {"comm_ble_builtin", "comm_wifi_builtin"}
 
 
 def load_parts_table(path: Path | None = None) -> list[dict]:
+    if path is None and config.env("PARTS_DB_URL"):
+        try:
+            from ..integrations.airbyte_lcsc import load_from_db
+
+            rows = load_from_db(config.env("PARTS_DB_URL"))
+            if rows:
+                return rows
+            log.warning("parts DB is empty (sync not run yet?); "
+                        "falling back to CSV")
+        except Exception as exc:
+            log.warning("parts DB unavailable (%s); falling back to CSV", exc)
     path = path or (config.DATA_DIR / "parts.csv")
     with open(path, newline="") as fh:
         return list(csv.DictReader(fh))
@@ -79,9 +95,28 @@ def match_parts(spec: Spec, table: list[dict] | None = None) -> PartsResult:
                 status="matched",
             ))
 
+    # Senso knowledge layer: pull part-selection context for unmatched blocks
+    # so the spec revision prompt has something concrete to work with.
+    kb_notes: list[str] = []
+    if unmatched:
+        try:
+            from ..integrations import senso_kb
+
+            blocks = ", ".join(
+                b.catalog_block for b in spec.blocks if b.id in set(unmatched)
+            )
+            context = senso_kb.design_rules_context(
+                f"part selection and alternatives for: {blocks}", top_k=2
+            )
+            if context:
+                kb_notes.append(context)
+        except Exception as exc:
+            log.warning("senso kb notes skipped: %s", exc)
+
     total = sum((line.unit_price_usd or 0.0) * line.qty for line in bom)
     return PartsResult(
-        bom=bom, unmatched_blocks=unmatched, total_cost_usd=round(total, 2)
+        bom=bom, unmatched_blocks=unmatched, total_cost_usd=round(total, 2),
+        kb_notes=kb_notes,
     )
 
 

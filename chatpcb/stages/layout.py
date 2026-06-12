@@ -29,6 +29,14 @@ MANUFACTURER = "pcbway"
 QUEUE_KEY = "chatpcb:layout:jobs"
 RESULT_PREFIX = "chatpcb:layout:result:"
 
+# Recorded per run by Guild.ai experiment tracking; replace with the real
+# kicad-tools optimizer knobs when stage 4 lands so runs stay comparable.
+ROUTER_SETTINGS = {
+    "manufacturer": MANUFACTURER,
+    "placement_optimizer": "mock-grid",
+    "autorouter": "mock-pass-through",
+}
+
 
 @dataclass
 class LayoutResult:

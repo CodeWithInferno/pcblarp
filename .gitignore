@@ -4,6 +4,7 @@ __pycache__/
 *.egg-info/
 dist/
 artifacts/
+data/parts.db
 .pytest_cache/
 .env
 .DS_Store

@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from . import config, telemetry
+from .integrations import composio_actions
 from .models import RunState
 from .pipeline import new_run_state, run_pipeline
 
@@ -68,6 +69,18 @@ def get_run(run_id: str) -> RunState:
     if run_id not in RUNS:
         raise HTTPException(status_code=404, detail="unknown run id")
     return RUNS[run_id]
+
+
+@app.post("/api/runs/{run_id}/share")
+def share_run(run_id: str) -> dict:
+    """Composio: push design files to a new GitHub repo + email the order
+    summary. No-ops with a reason when Composio is not configured."""
+    if run_id not in RUNS:
+        raise HTTPException(status_code=404, detail="unknown run id")
+    state = RUNS[run_id]
+    if state.status in ("queued", "running"):
+        raise HTTPException(status_code=409, detail="run not finished yet")
+    return composio_actions.share_run(state, config.artifacts_dir() / run_id)
 
 
 @app.get("/api/dashboard")

@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from . import config, telemetry
-from .integrations import jua
+from .integrations import guild_tracking, jua
 from .models import STAGE_ORDER, PartsResult, RunState, Spec, StageRecord
 from .stages import StageError
 from .stages import export as export_stage
@@ -71,6 +71,7 @@ def run_pipeline(
     push(f"run {run_id} started")
 
     if not _run_spec_stage(run, ctx, push):
+        _track_experiment(run, push)
         return run
 
     if ctx.spec.status == "ok":
@@ -92,8 +93,17 @@ def run_pipeline(
     _run_export_stage(run, ctx, push)
 
     run.status = "done" if all(r.status == "ok" for r in run.stages) else "partial"
+    _track_experiment(run, push)
     push(f"pipeline finished: {run.status}")
     return run
+
+
+def _track_experiment(run: RunState, push) -> None:
+    """Guild.ai experiment tracking; isolated so it can never block a run."""
+    try:
+        guild_tracking.track_run(run)
+    except Exception as exc:
+        push(f"experiment tracking skipped: {_short(str(exc))}")
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +185,12 @@ def _run_downstream_stages(run: RunState, ctx: _Context, push) -> None:
                 and record.attempts < config.max_stage_attempts()
                 and run.revision_count < config.max_spec_revisions()
             ):
+                # Senso kb_notes gathered during parts matching give the
+                # revision concrete part-selection context.
+                if ctx.parts and ctx.parts.kb_notes:
+                    feedback += ("\n\nParts knowledge-layer notes:\n"
+                                 + "\n".join(ctx.parts.kb_notes))
+
                 revision_no = run.revision_count + 1
 
                 def log_revision(attempt, status, duration_ms, error=None,
