@@ -1,0 +1,30 @@
+# Node
+node_modules/
+frontend/dist/
+frontend/.env
+frontend/*.log
+
+# Python
+backend/venv/
+backend/__pycache__/
+backend/app/__pycache__/
+backend/*.pyc
+backend/.env
+backend/generated/*
+!backend/generated/.gitkeep
+backend/app/generated/*
+!backend/app/generated/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets
+.env
+*.pem
