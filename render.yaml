@@ -1,0 +1,50 @@
+# Render blueprint: web API + layout worker.
+#
+# Heavy routing on Nebius: build docker/worker.Dockerfile and run the image on
+# a Nebius VM with the same REDIS_URL (plus S3 creds if exporting to S3).
+# Nothing else changes; the worker only needs to reach Redis.
+services:
+  - type: web
+    name: chatpcb
+    runtime: python
+    plan: starter
+    buildCommand: pip install ".[cloud]"
+    startCommand: uvicorn chatpcb.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: TF_GATEWAY_URL
+        sync: false
+      - key: TF_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-6
+      - key: CLICKHOUSE_URL
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: CHATPCB_REMOTE_LAYOUT
+        value: "0"
+  - type: worker
+    name: chatpcb-layout-worker
+    runtime: docker
+    dockerfilePath: ./docker/worker.Dockerfile
+    envVars:
+      - key: REDIS_URL
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
