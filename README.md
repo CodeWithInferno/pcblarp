@@ -5,12 +5,12 @@ BOM, pick-and-place for PCBWay).
 
 ```
 idea ──> [1 spec] ──> [2 parts] ──> [3 schematic] ──> [4 layout] ──> [5 export]
-          Claude       parts.csv     kicad-tools       kicad-tools     S3 / local
-            │                        (mocked)          + pcbway DRC    presigned
-            │                                          (mocked)        URLs
+          Claude       parts.csv     real circuits     real placement  real Gerbers
+            │                        + .kicad_sch      + DRC checks    PnP, BOMs
+            │                        (KiCad library)   (unrouted)      S3 / local
             └──── error feedback loop: any stage failure (JSON parse, ERC,
-                  DRC, routing) goes back to Claude for a spec revision pass,
-                  max 3 retries, every attempt logged to telemetry
+                  unsupported block, board too small) goes back to Claude for
+                  a spec revision pass, max 3 retries, logged to telemetry
 ```
 
 ## Quickstart
@@ -57,12 +57,14 @@ sponsor service. Install the optional SDKs with `pip install -e ".[sponsors]"`.
 |---|---|---|
 | 1 spec | `chatpcb/stages/spec.py` | Real. Claude via `prompts/stage1_spec.md`, validated by pydantic, parse errors fed back for retry. |
 | 2 parts | `chatpcb/stages/parts.py` | Real against `data/parts.csv` (~45 seeded parts, stand-in for an Airbyte LCSC sync; LCSC ids are seed data, verify before ordering). |
-| 3 schematic | `chatpcb/stages/schematic.py` | Mocked. Emits netlist.json + .kicad_sch skeleton. Replace with kicad-tools circuit blocks (`pip install -e ".[eda]"`). |
-| 4 layout | `chatpcb/stages/layout.py` | Mocked. Emits board + clean pcbway DRC report. Replace with kicad-tools placement + autoroute. Offloads to the Redis worker when configured. |
-| 5 export | `chatpcb/stages/export.py` | Real packaging, mocked Gerber/PnP content. S3 presigned URLs when `S3_BUCKET` is set. |
+| 3 schematic | `chatpcb/stages/schematic.py` | Real. Block circuits (`chatpcb/eda/blocks.py`, 24 of 40 catalog blocks) instantiate symbols vendored from the official KiCad libraries, the netlist engine resolves every pin (GPIO allocation, I2C/SPI/UART/USB buses, power topology), and a self-contained `.kicad_sch` is generated. Unsupported blocks feed the supported list back to Claude for a spec revision. |
+| 4 layout | `chatpcb/stages/layout.py` | Real placement (MaxRects over courtyards), real `.kicad_pcb` with netted pads, honest checks (courtyard overlap, outline fit -> revision loop). **Routing not implemented yet**: boards ship placed-but-unrouted with the ratsnest visible in KiCad. Offloads to the Redis worker when configured. |
+| 5 export | `chatpcb/stages/export.py` | Real Gerbers (RS-274X pads/mask/outline + Excellon drill, generated directly from pad geometry), real pick-and-place from placement, assembly BOM, packaging. S3 presigned URLs when `S3_BUCKET` is set. |
 
-Replace mocks one stage at a time; each stage has a stable result dataclass
-the pipeline and tests already exercise.
+The remaining gap to production fab outputs is routing (tracks + zones) and
+silkscreen; everything else in the export is real geometry. Vendored library
+components live in `data/kicad_library/` (CC-BY-SA 4.0 w/ KiCad exception);
+refresh with `make fetch-libs`.
 
 ## Key pieces
 

@@ -30,7 +30,7 @@ def test_full_pipeline_mocked(mock_env):
     assert {r["stage"] for r in rows} == {"spec", "parts", "schematic",
                                           "layout", "export"}
     layout_rows = [r for r in rows if r["stage"] == "layout"]
-    assert layout_rows[0]["routing_completion_pct"] == 100.0
+    assert layout_rows[0]["routing_completion_pct"] == 0.0  # placed, unrouted
 
 
 def test_layout_failure_keeps_partial_results(mock_env, monkeypatch):

@@ -102,10 +102,10 @@ def test_run_is_tracked_to_experiments_jsonl(mock_env):
     assert path.exists()  # guildai not installed -> jsonl fallback
     record = json.loads(path.read_text().splitlines()[-1])
     assert record["run_id"] == state.run_id
-    assert record["scalars"]["routing_completion_pct"] == 100.0
+    assert record["scalars"]["routing_completion_pct"] == 0.0  # placed, unrouted
     assert record["scalars"]["drc_violations"] == 0.0
     assert record["flags"]["prompt_version"].startswith("dev-")
-    assert record["flags"]["placement_optimizer"] == "mock-grid"
+    assert record["flags"]["placement_optimizer"] == "maxrects-bssf"
 
 
 def test_failed_runs_are_tracked_too(mock_env, monkeypatch):

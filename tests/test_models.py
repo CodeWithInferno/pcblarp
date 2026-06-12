@@ -8,7 +8,7 @@ def test_worked_example_validates(mock_spec_data):
     spec = Spec.model_validate(mock_spec_data)
     assert spec.project.name == "ble-voice-streamer"
     assert spec.mcu_requirements.chosen_block == "mcu_esp32_c3"
-    assert spec.constraints.max_board_size_mm == (40, 30)
+    assert spec.constraints.max_board_size_mm == (60, 45)
 
 
 def test_catalog_has_all_prompt_blocks():

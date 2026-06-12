@@ -19,7 +19,7 @@
   ],
   "clarification_questions": [],
   "constraints": {
-    "max_board_size_mm": [40, 30],
+    "max_board_size_mm": [60, 45],
     "target_battery_life_hours": 6,
     "max_unit_cost_usd": null,
     "enclosure_required": true,

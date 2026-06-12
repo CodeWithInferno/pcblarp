@@ -11,7 +11,7 @@ def test_handle_job_returns_artifact_contents(mock_env, mock_spec_data):
                                           "spec": mock_spec_data}))
     assert key.endswith("abc123")
     assert payload["status"] == "ok"
-    assert payload["result"]["routing_completion_pct"] == 100.0
+    assert payload["result"]["routing_completion_pct"] == 0.0  # placed, unrouted
     # artifacts travel by content, not by path (no shared volume)
     names = set(payload["files"])
     assert any(n.endswith(".kicad_pcb") for n in names)

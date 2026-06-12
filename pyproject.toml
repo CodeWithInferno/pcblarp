@@ -18,11 +18,6 @@ cloud = [
     "redis>=5.0",             # layout worker queue
     "clickhouse-connect>=0.7" # telemetry sink
 ]
-eda = [
-    # Real stage 3/4 implementations (schematic generation, placement, autoroute).
-    # Stages run mocked until this lands; all imports are guarded.
-    "kicad-tools",
-]
 sponsors = [
     "composio>=0.7",          # share runs via GitHub/Gmail
     "guildai>=0.9",           # experiment tracking

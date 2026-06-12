@@ -1,16 +1,19 @@
-"""Stage 4: schematic -> placed + routed board + DRC (MOCKED).
+"""Stage 4: design -> placed board + DRC report.
 
-Real implementation: kicad-tools placement optimizer + autorouter, then DRC
-with manufacturer="pcbway" rules; DRC violations / unrouted nets raise
-StageError with llm_feedback so the pipeline can ask Claude for a spec
-revision. The mock emits a board skeleton and a clean DRC report.
+Real placement: the netlist design is rebuilt from the spec (deterministic),
+footprints are packed onto the board outline (MaxRects), and a real
+.kicad_pcb is generated with every pad bound to its net. Checks are honest:
+courtyard overlap and outline overflow raise StageError with llm_feedback
+(e.g. "board too small") so the revision loop can fix the spec.
+
+Routing is NOT implemented yet and is not faked: the DRC report says
+routed=false and lists the unrouted net count; KiCad shows the ratsnest.
 
 Heavy routing offload: when CHATPCB_REMOTE_LAYOUT=1 and REDIS_URL are set,
 the job is pushed to the Redis queue and a worker (chatpcb/worker.py, run
 dockerized on Render or a Nebius box) executes it. The worker has no shared
 filesystem with the API: artifact contents come back through the Redis
-result payload and are written into out_dir here (fine for mock-sized text
-files; TODO hand off via S3 once real Gerber-scale outputs exist).
+result payload and are written into out_dir here.
 """
 
 from __future__ import annotations
@@ -21,6 +24,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
+from ..eda.board_gen import build_board, generate_board
+from ..eda.netlist import DesignError, build_design
 from ..models import Spec
 from . import StageError, injected_failure, slugify
 from .schematic import SchematicResult
@@ -29,12 +34,11 @@ MANUFACTURER = "pcbway"
 QUEUE_KEY = "chatpcb:layout:jobs"
 RESULT_PREFIX = "chatpcb:layout:result:"
 
-# Recorded per run by Guild.ai experiment tracking; replace with the real
-# kicad-tools optimizer knobs when stage 4 lands so runs stay comparable.
+# Recorded per run by Guild.ai experiment tracking.
 ROUTER_SETTINGS = {
     "manufacturer": MANUFACTURER,
-    "placement_optimizer": "mock-grid",
-    "autorouter": "mock-pass-through",
+    "placement_optimizer": "maxrects-bssf",
+    "autorouter": "none (placement only)",
 }
 
 
@@ -44,58 +48,83 @@ class LayoutResult:
     drc_report_path: str
     drc_violations: int
     routing_completion_pct: float
-    mocked: bool = True
+    mocked: bool = False
     remote: bool = False
+    component_count: int = 0
+    board_size_mm: tuple[float, float] = (0.0, 0.0)
 
 
 def build_layout(spec: Spec, schematic: SchematicResult, out_dir: Path) -> LayoutResult:
     failure = injected_failure("layout")
     if failure:
         raise failure
-    del schematic  # mock derives everything from the spec
+    del schematic  # design is rebuilt deterministically from the spec
     if config.flag("CHATPCB_REMOTE_LAYOUT") and config.env("REDIS_URL"):
         return _run_remote(spec, out_dir)
     return run_local(spec, out_dir)
 
 
 def run_local(spec: Spec, out_dir: Path) -> LayoutResult:
-    """Placement + routing + DRC. Mock until kicad-tools is wired in.
-    Also called directly by the worker process."""
+    """Placement + checks. Also called directly by the worker process."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    board_path = out_dir / f"{slugify(spec.project.name)}.kicad_pcb"
-    board_path.write_text(_mock_board(spec))
+    try:
+        design = build_design(spec)
+    except DesignError as exc:
+        raise StageError(str(exc), llm_feedback=exc.llm_feedback) from exc
+
+    board = build_board(design, spec.constraints.max_board_size_mm)
+
+    title = slugify(spec.project.name)
+    board_path = out_dir / f"{title}.kicad_pcb"
+    board_path.write_text(generate_board(design, board, title))
 
     report = {
         "manufacturer": MANUFACTURER,
-        "violations": [],
-        "unrouted_nets": 0,
-        "routing_completion_pct": 100.0,
-        "mocked": True,
+        "board_size_mm": [board.width, board.height],
+        "components_placed": len(board.placements),
+        "violations": board.violations,
+        "routed": False,
+        "unrouted_nets": board.unrouted_nets,
+        "routing_completion_pct": 0.0,
+        "checks": ["courtyard_overlap", "board_outline_fit"],
+        "notes": [
+            "placement is real (MaxRects over courtyards from the official "
+            "KiCad footprints); routing is not implemented yet, open the "
+            "board in KiCad to see the ratsnest",
+        ],
+        "mocked": False,
     }
     drc_path = out_dir / "drc_report.json"
     drc_path.write_text(json.dumps(report, indent=2))
 
-    violations = len(report["violations"])
-    completion = float(report["routing_completion_pct"])
-    if violations or completion < 100.0:
+    if board.violations:
+        size = spec.constraints.max_board_size_mm
         raise StageError(
-            f"DRC/routing failed: {violations} violations, "
-            f"{completion:.1f}% routed",
+            f"placement failed: {'; '.join(board.violations)}",
             llm_feedback=(
-                f"Board layout failed {MANUFACTURER} DRC with {violations} "
-                f"violations and {completion:.1f}% routing completion. "
-                "Consider a larger board outline or fewer blocks."
+                f"Board placement failed {MANUFACTURER} checks: "
+                f"{'; '.join(board.violations)}. "
+                + (
+                    f"Increase max_board_size_mm (currently {size[0]}x{size[1]}mm) "
+                    "or remove blocks. Note ESP32 module courtyards include the "
+                    "antenna keep-out and are larger than the module body."
+                    if size else "Reduce the number of blocks."
+                )
             ),
             metrics={
-                "drc_violations": float(violations),
-                "routing_completion_pct": completion,
+                "drc_violations": float(len(board.violations)),
+                "routing_completion_pct": 0.0,
             },
         )
+
     return LayoutResult(
         board_path=str(board_path),
         drc_report_path=str(drc_path),
-        drc_violations=violations,
-        routing_completion_pct=completion,
+        drc_violations=0,
+        routing_completion_pct=0.0,
+        mocked=False,
+        component_count=len(board.placements),
+        board_size_mm=(board.width, board.height),
     )
 
 
@@ -114,7 +143,7 @@ def _run_remote(spec: Spec, out_dir: Path) -> LayoutResult:
         raise StageError(
             f"remote layout job timed out after {timeout}s",
             llm_feedback=(
-                "The autorouter worker timed out. Consider a simpler design "
+                "The layout worker timed out. Consider a simpler design "
                 "with fewer blocks or a larger board."
             ),
         )
@@ -135,19 +164,8 @@ def _run_remote(spec: Spec, out_dir: Path) -> LayoutResult:
         drc_report_path=str(out_dir / Path(body["drc_report_path"]).name),
         drc_violations=body["drc_violations"],
         routing_completion_pct=body["routing_completion_pct"],
-        mocked=body.get("mocked", True),
+        mocked=body.get("mocked", False),
         remote=True,
+        component_count=body.get("component_count", 0),
+        board_size_mm=tuple(body.get("board_size_mm", (0.0, 0.0))),
     )
-
-
-def _mock_board(spec: Spec) -> str:
-    size = spec.constraints.max_board_size_mm or (50.0, 40.0)
-    lines = [
-        "(kicad_pcb",
-        "  (version 20240108)",
-        '  (generator "chatpcb-mock")',
-        f'  (gr_text "MOCK board {size[0]}x{size[1]}mm, '
-        f'{len(spec.blocks)} blocks, mfr={MANUFACTURER}" (at 5 5))',
-    ]
-    lines.append(")")
-    return "\n".join(lines) + "\n"

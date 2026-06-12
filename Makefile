@@ -42,6 +42,9 @@ sync-parts:  ## trigger the Airbyte LCSC sync (AIRBYTE_* env), or seed local SQL
 ingest-kb:  ## push pcbway capabilities + parts datasheet snippets into Senso (needs SENSO_API_KEY)
 	$(VENV)/bin/python -m chatpcb.integrations.senso_kb
 
+fetch-libs:  ## refresh vendored KiCad symbols/footprints (data/kicad_library)
+	$(VENV)/bin/python scripts/fetch_kicad_library.py
+
 docker-worker:
 	docker build -f docker/worker.Dockerfile -t chatpcb-worker .
 
